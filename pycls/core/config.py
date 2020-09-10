@@ -94,6 +94,9 @@ _C.ANYNET.SE_ON = False
 # SE ratio
 _C.ANYNET.SE_R = 0.25
 
+# Channels for first stem
+_C.ANYNET.STEM_CHANNELS = 3
+
 
 # ------------------------------------------------------------------------------------ #
 # RegNet options
@@ -185,6 +188,7 @@ _C.BN.MOM = 0.1
 # Precise BN stats
 _C.BN.USE_PRECISE_STATS = True
 _C.BN.NUM_SAMPLES_PRECISE = 8192
+_C.BN.NUM_GROUPS = 32
 
 # Initialize the gamma of the final BN of each block to zero
 _C.BN.ZERO_INIT_FINAL_GAMMA = False

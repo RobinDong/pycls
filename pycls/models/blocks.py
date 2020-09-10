@@ -10,8 +10,53 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from pycls.core.config import cfg
 from torch.nn import Module
+
+
+class Conv2d(nn.Conv2d):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride=1,
+        padding=0,
+        dilation=1,
+        groups=1,
+        bias=True,
+    ):
+        super(Conv2d, self).__init__(
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            padding,
+            dilation,
+            groups,
+            bias,
+        )
+
+    def forward(self, x):
+        weight = self.weight
+        weight_mean = (
+            weight.mean(dim=1, keepdim=True)
+            .mean(dim=2, keepdim=True)
+            .mean(dim=3, keepdim=True)
+        )
+        weight = weight - weight_mean
+        std = weight.view(weight.size(0), -1).std(dim=1).view(-1, 1, 1, 1) + 1e-5
+        weight = weight / std.expand_as(weight)
+        return F.conv2d(
+            x, weight, self.bias, self.stride, self.padding, self.dilation, self.groups
+        )
+
+
+def BatchNorm2d(num_features, eps=1e-05, momentum=0.1):
+    return nn.GroupNorm(
+        num_channels=num_features, num_groups=cfg.BN.NUM_GROUPS, eps=eps
+    )
 
 
 # -------------------- Shortcuts for common torch.nn layers -------------------- #
@@ -21,12 +66,12 @@ def conv2d(w_in, w_out, k, *, stride=1, groups=1, bias=False):
     """Helper for building a conv2d layer."""
     assert k % 2 == 1, "Only odd size kernels supported to avoid padding issues."
     s, p, g, b = stride, (k - 1) // 2, groups, bias
-    return nn.Conv2d(w_in, w_out, k, stride=s, padding=p, groups=g, bias=b)
+    return Conv2d(w_in, w_out, k, stride=s, padding=p, groups=g, bias=b)
 
 
 def norm2d(w_in):
     """Helper for building a norm2d layer."""
-    return nn.BatchNorm2d(num_features=w_in, eps=cfg.BN.EPS, momentum=cfg.BN.MOM)
+    return BatchNorm2d(num_features=w_in, eps=cfg.BN.EPS, momentum=cfg.BN.MOM)
 
 
 def pool2d(_w_in, k, *, stride=1):
@@ -154,7 +199,7 @@ def adjust_block_compatibility(ws, bs, gs):
 
 def init_weights(m):
     """Performs ResNet-style weight initialization."""
-    if isinstance(m, nn.Conv2d):
+    if isinstance(m, Conv2d):
         # Note that there is no bias due to BN
         fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
         m.weight.data.normal_(mean=0.0, std=np.sqrt(2.0 / fan_out))
